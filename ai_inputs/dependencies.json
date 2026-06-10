@@ -1,0 +1,103 @@
+{
+  "ure_can_grasper.c": {
+    "speed": {
+      "role": "vitesse angulaire des moteurs du bras UR, passée en argv[1]",
+      "impacts": [
+        "wb_motor_set_velocity() — si 0.0 le bras est immobile",
+        "transition ROTATING→RELEASING : seuil wrist -2.3 jamais atteint si bras immobile",
+        "transition ROTATING_BACK→WAITING : retour position initiale jamais complété si bras immobile",
+        "grasped dans simulation_results.json peut devenir False",
+        "deposited dans simulation_results.json peut devenir False",
+        "grasp_events, release_events, all_cans_grasped, sequence_complete, wrist_reached_target, max_can_heights, duration dans le JSON",
+        "rotation_events dans simulation_results.json — si bras immobile, aucune rotation détectée",
+        "return_events dans simulation_results.json — si bras immobile, aucun retour en WAITING",
+        "distance_sensor_triggered dans simulation_results.json — si bras bloqué, le cycle ne reprend pas",
+        "gripper_opened dans simulation_results.json — si releasing jamais atteint, gripper reste fermé",
+        "tests lisant le code source .c : tout test cherchant 'speed = 1.0' échouera"
+      ]
+    },
+    "TIME_STEP": {
+      "role": "pas de simulation en millisecondes (#define 32)",
+      "impacts": [
+        "wb_robot_step() — cadence de la boucle de contrôle change",
+        "wb_distance_sensor_enable() et wb_position_sensor_enable() — fréquence de lecture des capteurs change",
+        "durée réelle des phases GRASPING, ROTATING, RELEASING change",
+        "duration, phase_durations dans le JSON",
+        "tests lisant le code source .c : tout test cherchant TIME_STEP ou la valeur 32 échouera"
+      ]
+    },
+    "target_positions": {
+      "role": "positions angulaires cibles des 4 joints du bras en GRASPING [-1.88, -2.14, -2.38, -1.51]",
+      "impacts": [
+        "wb_motor_set_position() en état GRASPING — lieu de dépose du bras change",
+        "wrist_1_joint_sensor — seuil -2.3 peut ne plus être atteint",
+        "wrist_reached_target, release_events, deposited, sequence_complete dans le JSON",
+        "rotation_events dans simulation_results.json — si position cible invalide, rotation incomplète",
+        "return_events dans simulation_results.json — si RELEASING jamais atteint, pas de retour",
+        "tests lisant le code source .c : tout test cherchant -1.88, -2.14, -2.38, -1.51 échouera"
+      ]
+    },
+    "distance_threshold": {
+      "role": "seuil de détection canette par le capteur distance (< 500)",
+      "impacts": [
+        "transition WAITING→GRASPING — si seuil trop bas, canette jamais détectée",
+        "distance_sensor_triggered, grasped, grasp_events, all_cans_grasped, sequence_complete dans le JSON",
+        "tests lisant le code source .c : tout test cherchant la valeur 500 échouera"
+      ]
+    },
+    "gripper_position": {
+      "role": "position de fermeture des doigts du gripper (0.85 rad)",
+      "impacts": [
+        "wb_motor_set_position() des hand_motors en GRASPING — force de saisie change",
+        "grasped, grasp_events, all_cans_grasped dans le JSON",
+        "gripper_closed dans simulation_results.json — fermeture moins efficace si valeur réduite",
+        "tests lisant le code source .c : tout test cherchant la valeur 0.85 échouera"
+      ]
+    },
+    "wrist_threshold": {
+      "role": "seuils de position du capteur wrist_1_joint (-2.3 pour RELEASING, -0.1 pour WAITING)",
+      "impacts": [
+        "transition ROTATING→RELEASING — déclenchement de la phase releasing change",
+        "transition ROTATING_BACK→WAITING — retour en position d'attente change",
+        "wrist_reached_target, release_events, deposited, sequence_complete, all_cans_grasped dans le JSON",
+        "tests lisant le code source .c : tout test cherchant -2.3 ou -0.1 échouera"
+      ]
+    }
+  },
+  "ure_supervisor.py": {
+    "HAUTEUR_SAISIE": {
+      "role": "seuil de hauteur pour valider qu'une canette est saisie (0.80 m)",
+      "impacts": [
+        "condition grasped[i] = True — si seuil trop élevé (ex: 1.20m), aucune canette jamais considérée saisie car Z max ≈ 0.96m",
+        "grasped, grasp_events, all_cans_grasped, sequence_complete, max_can_heights dans le JSON",
+        "distance_sensor_triggered dans simulation_results.json — si aucune saisie, le capteur semble ne jamais avoir déclenché",
+        "gripper_opened dans simulation_results.json — si aucune saisie, le relâchement ne peut pas avoir lieu",
+        "gripper_closed dans simulation_results.json — si saisie invalidée, gripper_closed devient False",
+        "release_events dans simulation_results.json — si aucune canette saisie, aucune ne peut être déposée",
+        "wrist_reached_target dans simulation_results.json — sans saisie validée, le cycle complet n'aboutit pas",
+        "sequence_complete dans simulation_results.json — séquence jamais complète si saisie invalide",
+        "return_events dans simulation_results.json — si cycle bloqué, aucun retour en WAITING",
+        "rotation_events dans simulation_results.json — si saisie invalide, la chaîne complète est compromise"
+      ]
+    },
+    "DEPLACEMENT_DEPOT": {
+      "role": "déplacement horizontal minimal pour valider qu'une canette est déposée (0.30 m)",
+      "impacts": [
+        "condition deposited[i] = True — si seuil trop élevé (ex: 99.0), aucune canette jamais déposée",
+        "deposited, release_events, sequence_complete, all_cans_grasped dans le JSON"
+      ]
+    },
+    "STEPS_STABLE": {
+      "role": "nombre de steps stables avant de valider une position (30 steps)",
+      "impacts": [
+        "délai de validation des positions — si trop grand (ex: 120), durée de simulation augmente fortement",
+        "duration dans le JSON — durée totale peut dépasser le timeout (270s)",
+        "sequence_complete dans simulation_results.json — si timeout atteint avant fin, séquence incomplète",
+        "release_events dans simulation_results.json — délai accru peut empêcher la validation du dépôt dans le temps imparti",
+        "return_events dans simulation_results.json — délai de validation retarde chaque transition",
+        "rotation_events dans simulation_results.json — idem, chaque étape est retardée",
+        "grasp_events dans simulation_results.json — délai accru peut bloquer la validation de saisie avant timeout"
+      ]
+    }
+  }
+}
